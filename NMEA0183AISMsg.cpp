@@ -162,9 +162,9 @@ bool tNMEA0183AISMsg::ConvertBinaryAISPayloadBinToAscii(const char *payloadbin) 
 }
 
 //**********************  BUILD 2-parted AIS Sentences  ************************
-const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part1(tNMEA0183AISMsg &AISMsg, bool own) {
+const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part1(tNMEA0183AISMsg &AISMsg, bool own, const char *TalkerID) {
 
-  Init(own?"VDO":"VDM", "AI", '!');
+  Init(own?"VDO":"VDM", TalkerID, '!');
   AddStrField("2");
   AddStrField("1");
   AddStrField("5");
@@ -175,9 +175,9 @@ const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part1(tNMEA0183AISMsg &AISMsg,
   return AISMsg;
 }
 
-const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part2(tNMEA0183AISMsg &AISMsg, bool own) {
+const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part2(tNMEA0183AISMsg &AISMsg, bool own, const char *TalkerID) {
 
-  Init(own?"VDO":"VDM", "AI", '!');
+  Init(own?"VDO":"VDM", TalkerID, '!');
   AddStrField("2");
   AddStrField("2");
   AddStrField("5");
@@ -188,26 +188,28 @@ const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part2(tNMEA0183AISMsg &AISMsg,
   return AISMsg;
 }
 
-const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg24PartA(tNMEA0183AISMsg &AISMsg, bool own) {
+const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg24PartA(tNMEA0183AISMsg &AISMsg, const char *Class, bool own, const char *TalkerID) {
 
-  Init(own?"VDO":"VDM", "AI", '!');
+  Init(own?"VDO":"VDM", TalkerID, '!');
   AddStrField("1");
   AddStrField("1");
   AddEmptyField();
-  AddStrField("A");
+  //  AddStrField("A");
+  AddStrField(Class);
   AddStrField( GetPayloadType24_PartA() );
   AddStrField("0");
 
   return AISMsg;
 }
 
-const tNMEA0183AISMsg& tNMEA0183AISMsg::BuildMsg24PartB(tNMEA0183AISMsg &AISMsg, bool own) {
+const tNMEA0183AISMsg& tNMEA0183AISMsg::BuildMsg24PartB(tNMEA0183AISMsg &AISMsg, const char *Class, bool own, const char *TalkerID) {
 
-  Init(own?"VDO":"VDM", "AI", '!');
+  Init(own?"VDO":"VDM", TalkerID, '!');
   AddStrField("1");
   AddStrField("1");
   AddEmptyField();
-  AddStrField("A");
+  //  AddStrField("A");
+  AddStrField(Class);
   AddStrField( GetPayloadType24_PartB() );
   AddStrField("0");    // Message 24, both parts have always Zero Padding
 

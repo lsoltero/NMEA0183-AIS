@@ -82,7 +82,7 @@ static bool AddETADateTime(tNMEA0183AISMsg &NMEA0183AISMsg, uint16_t &ETAdate, d
 // Got values from: ParseN2kPGN129038()
 bool SetAISClassABMessage1( tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType, uint8_t Repeat,
 			    uint32_t UserID, double Latitude, double Longitude, bool Accuracy, bool RAIM, uint8_t Seconds,
-			    double COG, double SOG, double Heading, double ROT, uint8_t NavStatus, bool own ) {
+			    double COG, double SOG, double Heading, double ROT, uint8_t NavStatus, bool own, const char *prefix ) {
 
   NMEA0183AISMsg.ClearAIS();
   if ( !AddMessageType(NMEA0183AISMsg, MessageType) ) return false;    // 0 - 5    | 6    Message Type -> Constant: 1
@@ -102,7 +102,7 @@ bool SetAISClassABMessage1( tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(RAIM, 1) ) return false;    // 148-148  | 1   RAIM flag 0 = RAIM not in use (default), 1 = RAIM in use
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 19) ) return false;       // 149-167  | 19  Radio Status  (-> 0 NOT SENT WITH THIS PGN!!!!!)
 
-  if ( !NMEA0183AISMsg.Init(own?"VDO":"VDM","AI", Prefix) ) return false;
+  if ( !NMEA0183AISMsg.Init(own?"VDO":"VDM",prefix, Prefix) ) return false;
   if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
   if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
   if ( !NMEA0183AISMsg.AddEmptyField() ) return false;
@@ -156,7 +156,7 @@ bool  SetAISClassAMessage5(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
 bool SetAISClassBMessage18(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID,
 			   double Latitude, double Longitude, bool Accuracy, bool RAIM,
 			   uint8_t Seconds, double COG, double SOG, double Heading, tN2kAISUnit Unit,
-			   bool Display, bool DSC, bool Band, bool Msg22, bool Mode, bool State, bool own) {
+			   bool Display, bool DSC, bool Band, bool Msg22, bool Mode, bool State, bool own, const char *TalkerID) {
   //
   NMEA0183AISMsg.ClearAIS();
   if ( !AddMessageType(NMEA0183AISMsg, MessageID) ) return false;      // 0 - 5    | 6    Message Type -> Constant: 18
@@ -180,7 +180,7 @@ bool SetAISClassBMessage18(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(RAIM, 1) ) return false;    // 147      | 1   as for Message Type 1,2,3
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 20) ) return false;       // 148-167  | 20  Radio Status not in PGN 129039
 
-  if ( !NMEA0183AISMsg.Init(own?"VDO":"VDM","AI", Prefix) ) return false;
+  if ( !NMEA0183AISMsg.Init(own?"VDO":"VDM",TalkerID, Prefix) ) return false;
   if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
   if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
   if ( !NMEA0183AISMsg.AddEmptyField() ) return false;

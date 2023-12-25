@@ -50,7 +50,7 @@ extern std::vector<ship *> vships;
 // Types 1, 2 and 3: Position Report Class A or B
 bool SetAISClassABMessage1(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType, uint8_t Repeat,
 			   uint32_t UserID, double Latitude, double Longitude, bool Accuracy, bool RAIM, uint8_t Seconds,
-			   double COG, double SOG, double Heading, double ROT, uint8_t NavStatus, bool own);
+			   double COG, double SOG, double Heading, double ROT, uint8_t NavStatus, bool own = 0, const char *TalkerID = "AI");
 
 //*****************************************************************************
 // AIS Class A Static and Voyage Related Data Message Type 5
@@ -65,7 +65,7 @@ bool SetAISClassAMessage5(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, ui
 bool SetAISClassBMessage18(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID,
 			   double Latitude, double Longitude, bool Accuracy, bool RAIM,
 			   uint8_t Seconds, double COG, double SOG, double Heading, tN2kAISUnit Unit,
-			   bool Display, bool DSC, bool Band, bool Msg22, bool Mode, bool State, bool own);
+			   bool Display, bool DSC, bool Band, bool Msg22, bool Mode, bool State, bool own=0, const char *TalkerID = "AI");
 
 //*****************************************************************************
 // Static Data Report Class B, Message Type 24
