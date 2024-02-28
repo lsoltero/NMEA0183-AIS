@@ -30,6 +30,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <N2kTypes.h>
 #include <N2kMsg.h>
 #include <string.h>
+#include <ctype.h>
 //#include <bitset>
 //#include <unordered_map>
 #include <sstream>
@@ -327,9 +328,19 @@ bool AddIMONumber(tNMEA0183AISMsg &NMEA0183AISMsg, uint32_t &IMONumber) {
 // 120bit Name or Destination
 bool AddText(tNMEA0183AISMsg &NMEA0183AISMsg, char *FieldVal, uint8_t length) {
   uint8_t len = length/6;
-
   if ( strlen(FieldVal) > len ) FieldVal[len] = 0;
-  if ( !NMEA0183AISMsg.AddEncodedCharToPayloadBin(FieldVal, length) ) return false;
+
+  // make sure characters fall into range defined in table 14
+  // https://www.itu.int/dms_pubrec/itu-r/rec/m/R-REC-M.1371-1-200108-S!!PDF-E.pdf
+  char AISStr[len]; // Max AIS strlen defined in ITU-R M.1371-1
+  int i;
+  for (i = 0; FieldVal[i] != '\0' && i < len; i++ ) {
+    //    AISStr[i] = (c >= 0x20 && c <= 0x5F) ? c : '?';  // done by AddEncodeChartToPayloadBin
+    AISStr[i] = toupper((int)FieldVal[i]);
+  }
+  AISStr[i]='\0';
+
+  if ( !NMEA0183AISMsg.AddEncodedCharToPayloadBin(AISStr, length) ) return false;
   return true;
 }
 
