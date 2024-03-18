@@ -162,12 +162,14 @@ bool tNMEA0183AISMsg::ConvertBinaryAISPayloadBinToAscii(const char *payloadbin) 
 }
 
 //**********************  BUILD 2-parted AIS Sentences  ************************
-const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part1(tNMEA0183AISMsg &AISMsg, bool own, const char *TalkerID) {
+const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part1(tNMEA0183AISMsg &AISMsg, bool own, const char *TalkerID, unsigned char SID) {
 
+  char sid[5];
+  snprintf(sid, sizeof(sid), "%d",SID);
   Init(own?"VDO":"VDM", TalkerID, '!');
   AddStrField("2");
   AddStrField("1");
-  AddStrField("5");
+  AddStrField(sid);
   AddStrField("A");
   AddStrField( GetPayloadType5_Part1() );
   AddStrField("0");
@@ -175,12 +177,14 @@ const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part1(tNMEA0183AISMsg &AISMsg,
   return AISMsg;
 }
 
-const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part2(tNMEA0183AISMsg &AISMsg, bool own, const char *TalkerID) {
+const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part2(tNMEA0183AISMsg &AISMsg, bool own, const char *TalkerID, unsigned char SID) {
 
+  char sid[5];
+  snprintf(sid, sizeof(sid), "%d",SID);
   Init(own?"VDO":"VDM", TalkerID, '!');
   AddStrField("2");
   AddStrField("2");
-  AddStrField("5");
+  AddStrField(sid);
   AddStrField("A");
   AddStrField( GetPayloadType5_Part2() );
   AddStrField("2"); // Message 5, Part 2 has always 2 Padding Zeros
