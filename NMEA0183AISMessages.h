@@ -76,7 +76,7 @@ bool SetAISClassBMessage18(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
 // ****************************************************************************
 // Type 21: AtoN
 // PGN 129041
-bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData &N2kData, char *NameExt = nullptr);
+bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData &N2kData);
 
 //*****************************************************************************
 // Static Data Report Class B, Message Type 24

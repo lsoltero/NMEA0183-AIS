@@ -232,13 +232,17 @@ bool SetAISClassBMessage18(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
 // ****************************************************************************
 // Type 21: AtoN
 // PGN 129041
-bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData &N2kData, char *NameExt) {
+bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData &N2kData) {
+  char name[sizeof(N2kData.AtoNName)];
+  strncpy(name, N2kData.AtoNName, sizeof(N2kData.AtoNName));
+  name[20] = '\0';
+
   NMEA0183AISMsg.ClearAIS();
   if ( !AddMessageType(NMEA0183AISMsg, N2kData.MessageID) ) return false;                 // 0 - 5    | 6    Message Type -> Constant: 18
   if ( !AddRepeat(NMEA0183AISMsg, N2kData.Repeat) ) return false;                         // 6 - 7    | 2    Repeat Indicator: 0 = default; 3 = do not repeat any more
   if ( !AddUserID(NMEA0183AISMsg, N2kData.UserID) ) return false;                         // 8 - 37   | 30   MMSI
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(N2kData.AtoNType, 5) ) return false;            // 38-42    | 5    Aid type
-  if ( !AddText(NMEA0183AISMsg, N2kData.AtoNName, 120) ) return false;                    // 43-162   | 120  Name
+  if ( !AddText(NMEA0183AISMsg, name, 120) ) return false;                                // 43-162   | 120  Name
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.Accuracy, 1)) return false;            // 163-163  | 1    Position Accuracy
   if ( !AddLongitude(NMEA0183AISMsg, N2kData.Longitude) ) return false;                   // 164-191  | 28  Longitude in Minutes / 10000
   if ( !AddLatitude(NMEA0183AISMsg, N2kData.Latitude) ) return false;                     // 192-218  | 27  Latitude in Minutes / 10000
@@ -253,7 +257,11 @@ bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData 
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.VirtualAtoNFlag, 1)) return false;      // 269-269  | 1    Virtual-aid flag
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.AssignedModeFlag, 1)) return false;     // 270-270  | 1    Assigned-mode  flag
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 1)) return false;                             // 271-271  | 1    Spare
-  if ( NameExt ) {
+
+  if ( strlen(N2kData.AtoNName) > 20 ) {
+    char NameExt[14+1];
+    strncpy(NameExt, N2kData.AtoNName+20, sizeof(NameExt));
+    NameExt[sizeof(NameExt)-1] = '\0';
     if ( !AddText(NMEA0183AISMsg, NameExt, 88) ) return false;                             // 272-360   | 88  Name Extension
   }
 
