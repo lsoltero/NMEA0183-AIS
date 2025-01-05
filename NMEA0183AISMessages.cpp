@@ -81,6 +81,7 @@ static bool AddETADateTime(tNMEA0183AISMsg &NMEA0183AISMsg, uint16_t &ETAdate, d
 // because AIS encodes messages using a 6-bits ASCII mechanism and 168 divided by 6 is 28.
 //
 // Got values from: ParseN2kPGN129038()
+// extern void BuildN0183RawMsg(char *mesg, const tNMEA0183Msg &NMEA0183Msg);
 bool SetAISClassABMessage1( tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType, uint8_t Repeat,
 			    uint32_t UserID, double Latitude, double Longitude, bool Accuracy, bool RAIM, uint8_t Seconds,
 			    double COG, double SOG, double Heading, double ROT, uint8_t NavStatus, bool own, const char *prefix ) {
@@ -111,6 +112,11 @@ bool SetAISClassABMessage1( tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType
   if ( !NMEA0183AISMsg.AddStrField( NMEA0183AISMsg.GetPayload() ) ) return false;
   if ( !NMEA0183AISMsg.AddStrField("0") ) return false;    // Message 1,2,3 has always Zero Padding
 
+  /*
+  char mesg[1000] = {0};
+  BuildN0183RawMsg(mesg, NMEA0183AISMsg);
+fprintf(stderr, "%s\n", mesg);
+  */
   return true;
 }
 
@@ -142,6 +148,37 @@ bool  SetAISClassAMessage5(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(DTE, 1) ) return false;        // 422       | 1   | Data terminal equipment (DTE) ready (0 = available, 1 = not available = default)
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 1) ) return false;          // 423       | 1   | spare
 
+  return true;
+}
+
+//*****************************************************************************
+// AIS safety-related broadcast message
+// https://fossies.org/linux/gpsd/test/sample.aivdm
+bool SetAISSafetyMessage14(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID, char *text)
+{
+  NMEA0183AISMsg.ClearAIS();
+  if ( !AddMessageType(NMEA0183AISMsg, 14) ) return false;      // 0 - 5    | 6    Message Type -> Constant: 14
+  if ( !AddRepeat(NMEA0183AISMsg, Repeat) ) return false;       // 6 - 7    | 2    Repeat Indicator: 0 = default; 3 = do not repeat any more
+  if ( !AddUserID(NMEA0183AISMsg, UserID) ) return false;       // 8 - 37   | 30  MMSI
+  if ( !NMEA0183AISMsg.AddIntToPayloadBin(1, 2) ) return false; // 38 - 39   |  2   Spare not used
+  int len = (strlen(text)+1)*6;
+  if ( len > 968 ) len = 968;
+  if ( !AddText(NMEA0183AISMsg, text, len) ) return false;      // 40   | 968 max free text 161  6-bit characters -> Ascii Table
+
+  // TODO: the max NMEA183 AIS payload is 82 characters.  So need to split this into 2 sentences.  See BuildMsg21Part1/2 as example
+  if ( !NMEA0183AISMsg.Init("VDM","AI", Prefix) ) return false;
+  if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
+  if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
+  if ( !NMEA0183AISMsg.AddEmptyField() ) return false;
+  if ( !NMEA0183AISMsg.AddStrField("A") ) return false;
+  if ( !NMEA0183AISMsg.AddStrField( NMEA0183AISMsg.GetPayload(true) ) ) return false;
+  if ( !NMEA0183AISMsg.AddStrField("0") ) return false;    // Message 14, has always Zero Padding
+
+  /*
+  char mesg[1000] = {0};
+  BuildN0183RawMsg(mesg, NMEA0183AISMsg);
+fprintf(stderr, "%s\n", mesg);
+  */
   return true;
 }
 
@@ -191,6 +228,37 @@ bool SetAISClassBMessage18(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
 
   return true;
 }
+
+// ****************************************************************************
+// Type 21: AtoN
+// PGN 129041
+bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData &N2kData, char *NameExt) {
+  NMEA0183AISMsg.ClearAIS();
+  if ( !AddMessageType(NMEA0183AISMsg, N2kData.MessageID) ) return false;                 // 0 - 5    | 6    Message Type -> Constant: 18
+  if ( !AddRepeat(NMEA0183AISMsg, N2kData.Repeat) ) return false;                         // 6 - 7    | 2    Repeat Indicator: 0 = default; 3 = do not repeat any more
+  if ( !AddUserID(NMEA0183AISMsg, N2kData.UserID) ) return false;                         // 8 - 37   | 30   MMSI
+  if ( !NMEA0183AISMsg.AddIntToPayloadBin(N2kData.AtoNType, 5) ) return false;            // 38-42    | 5    Aid type
+  if ( !AddText(NMEA0183AISMsg, N2kData.AtoNName, 120) ) return false;                    // 43-162   | 120  Name
+  if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.Accuracy, 1)) return false;            // 163-163  | 1    Position Accuracy
+  if ( !AddLongitude(NMEA0183AISMsg, N2kData.Longitude) ) return false;                   // 164-191  | 28  Longitude in Minutes / 10000
+  if ( !AddLatitude(NMEA0183AISMsg, N2kData.Latitude) ) return false;                     // 192-218  | 27  Latitude in Minutes / 10000
+  if ( !AddDimensions(NMEA0183AISMsg, N2kData.Length, N2kData.Beam,
+		      N2kData.PositionReferenceStarboard,
+		      N2kData.PositionReferenceTrueNorth) ) return false;                  // 219-236  | 237-248 | 30 Dimensions
+  if ( !NMEA0183AISMsg.AddIntToPayloadBin(N2kData.GNSSType, 4) ) return false;             // 249-252  | 4    Type of EPFD
+  if ( !AddSeconds(NMEA0183AISMsg, N2kData.Seconds) ) return false;                        // 253-258  | 6    Seconds in UTC timestamp)
+  if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.OffPositionIndicator, 1)) return false; // 259-259  | 1    Off-Position Indicator
+  if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 8) ) return false;                            // 260-267  | 8   Regional Reserved
+  if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.RAIM, 1)) return false;                 // 268-268  | 1    RAIM Flag
+  if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.VirtualAtoNFlag, 1)) return false;      // 269-269  | 1    Virtual-aid flag
+  if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.AssignedModeFlag, 1)) return false;     // 270-270  | 1    Assigned-mode  flag
+  if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 1)) return false;                             // 271-271  | 1    Spare
+  if ( NameExt ) {
+    if ( !AddText(NMEA0183AISMsg, NameExt, 88) ) return false;                             // 272-360   | 88  Name Extension
+  }
+
+  return true;
+}  
 
 //  ****************************************************************************
 //  Type 24: Static Data Report

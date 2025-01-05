@@ -35,6 +35,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <stddef.h>
 #include <vector>
 #include <string>
+#include "N2kMessages.h"
 
 #define MAX_SHIP_IN_VECTOR 200
 class ship {
@@ -61,11 +62,21 @@ bool SetAISClassAMessage5(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, ui
                           char *Destination, tN2kGNSStype GNSStype, uint8_t DTE );
 
 //*****************************************************************************
+// AIS safety-related broadcast message
+// PGN129802
+bool SetAISSafetyMessage14(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID, char *text);
+
+//*****************************************************************************
 // AIS position report (class B 129039) -> Standard Class B CS Position Report Message Type 18 Part B
 bool SetAISClassBMessage18(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID,
 			   double Latitude, double Longitude, bool Accuracy, bool RAIM,
 			   uint8_t Seconds, double COG, double SOG, double Heading, tN2kAISUnit Unit,
 			   bool Display, bool DSC, bool Band, bool Msg22, bool Mode, bool State, bool own=0, const char *TalkerID = "AI");
+
+// ****************************************************************************
+// Type 21: AtoN
+// PGN 129041
+bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData &N2kData, char *NameExt = nullptr);
 
 //*****************************************************************************
 // Static Data Report Class B, Message Type 24

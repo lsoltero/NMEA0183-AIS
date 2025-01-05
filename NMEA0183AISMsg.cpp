@@ -192,6 +192,36 @@ const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part2(tNMEA0183AISMsg &AISMsg,
   return AISMsg;
 }
 
+const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg21Part1(tNMEA0183AISMsg &AISMsg, const char *Class, bool own, const char *TalkerID, unsigned char SID) {
+
+  char sid[5];
+  snprintf(sid, sizeof(sid), "%d",SID);
+  Init(own?"VDO":"VDM", TalkerID, '!');
+  AddStrField("2");
+  AddStrField("1");
+  AddStrField(sid);
+  AddStrField(Class);
+  AddStrField( GetPayloadType21_Part1() );
+  AddStrField("0");
+
+  return AISMsg;
+}
+
+const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg21Part2(tNMEA0183AISMsg &AISMsg, const char *Class, bool own, const char *TalkerID, unsigned char SID) {
+
+  char sid[5];
+  snprintf(sid, sizeof(sid), "%d",SID);
+  Init(own?"VDO":"VDM", TalkerID, '!');
+  AddStrField("2");
+  AddStrField("2");
+  AddStrField(sid);
+  AddStrField(Class);
+  AddStrField( GetPayloadType21_Part2() );
+  AddStrField("2"); // Message 21, Part 2 has always 2 Padding Zeros
+
+  return AISMsg;
+}
+
 const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg24PartA(tNMEA0183AISMsg &AISMsg, const char *Class, bool own, const char *TalkerID) {
 
   Init(own?"VDO":"VDM", TalkerID, '!');
@@ -222,12 +252,48 @@ const tNMEA0183AISMsg& tNMEA0183AISMsg::BuildMsg24PartB(tNMEA0183AISMsg &AISMsg,
 
 //*******************************  AIS PAYLOADS  *********************************
 // get converted Payload for Message 1, 2, 3 & 18, always Length 168
-const char *tNMEA0183AISMsg::GetPayload() {
+const char *tNMEA0183AISMsg::GetPayload(bool bIgnoreLenChk) {
 
-  uint16_t lenbin = strlen( PayloadBin);
-  if ( lenbin != 168 ) return nullptr;
+  if ( bIgnoreLenChk == false ) {
+    uint16_t lenbin = strlen( PayloadBin);
+    if ( lenbin != 168 ) return nullptr;
+  }
 
   if ( !ConvertBinaryAISPayloadBinToAscii( PayloadBin ) ) return nullptr;
+  return Payload;
+}
+
+//******************************************************************************
+// get converted Part 1 of Payload for Message 21
+const char *tNMEA0183AISMsg::GetPayloadType21_Part1() {
+
+  uint16_t lenbin = strlen( PayloadBin);
+  if ( lenbin < 272 ||lenbin > 360 ) return nullptr;
+
+  char to[265];
+  strncpy(to, PayloadBin, 264); // First Part is always 264 Length (payload of 44 bytes)
+  to[264]=0;
+
+  if ( !ConvertBinaryAISPayloadBinToAscii( to ) ) return nullptr;
+
+  return Payload;
+}
+
+//******************************************************************************
+// get converted Part 2 of Payload for Message 5
+const char *tNMEA0183AISMsg::GetPayloadType21_Part2() {
+
+  uint16_t lenbin = strlen( PayloadBin);
+  if ( lenbin < 272 || lenbin > 360 ) return nullptr;
+
+  lenbin -= 264;        // Second Part is always lien - 264
+  char to[lenbin+3];
+  strncpy(to, PayloadBin + 264, lenbin);
+  to[lenbin+0]='0';
+  to[lenbin+1]='0';
+  to[lenbin+2]='0';
+
+  if ( !ConvertBinaryAISPayloadBinToAscii( to ) ) return nullptr;
   return Payload;
 }
 

@@ -64,15 +64,19 @@ class tNMEA0183AISMsg : public tNMEA0183Msg {
 
   public:
     tNMEA0183AISMsg();
-    const char *GetPayload();
+    const char *GetPayload(bool bIgnoreLenChk = false);
     const char *GetPayloadType5_Part1();
     const char *GetPayloadType5_Part2();
+    const char *GetPayloadType21_Part1();
+    const char *GetPayloadType21_Part2();
     const char *GetPayloadType24_PartA();
     const char *GetPayloadType24_PartB();
     const char *GetPayloadBin() const { return  PayloadBin; }
 
     const tNMEA0183AISMsg& BuildMsg5Part1(tNMEA0183AISMsg &AISMsg, bool own = 0, const char *TalkerID = "AI", unsigned char SID = 5);
     const tNMEA0183AISMsg& BuildMsg5Part2(tNMEA0183AISMsg &AISMsg, bool own = 0, const char *TalkerID = "AI", unsigned char SID = 5);
+    const tNMEA0183AISMsg& BuildMsg21Part1(tNMEA0183AISMsg &AISMsg, const char *Class = "A", bool own = 0, const char *TalkerID = "AI", unsigned char SID = 5);
+    const tNMEA0183AISMsg& BuildMsg21Part2(tNMEA0183AISMsg &AISMsg, const char *Class = "A", bool own = 0, const char *TalkerID = "AI", unsigned char SID = 5);
     const tNMEA0183AISMsg& BuildMsg24PartA(tNMEA0183AISMsg &AISMsg, const char *Class = "A", bool own = 0, const char *TalkerID = "AI");
     const tNMEA0183AISMsg& BuildMsg24PartB(tNMEA0183AISMsg &AISMsg, const char *Class = "A", bool own = 0, const char *TalkerID = "AI");
 
