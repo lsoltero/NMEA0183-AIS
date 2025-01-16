@@ -291,7 +291,7 @@ const char *tNMEA0183AISMsg::GetPayloadType21_Part2() {
   strncpy(to, PayloadBin + 264, lenbin);
   to[lenbin+0]='0';
   to[lenbin+1]='0';
-  to[lenbin+2]='0';
+  to[lenbin+2]=0;
 
   if ( !ConvertBinaryAISPayloadBinToAscii( to ) ) return nullptr;
   return Payload;
