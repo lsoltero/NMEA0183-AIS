@@ -32,7 +32,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <cstdio>
 #include <sstream>
 
-const char AsciiChar[] = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !\"#$%&\'()*+,-./0123456789:;<=>?";
+const char *tNMEA0183AISMsg::AsciiChar = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !\"#$%&\'()*+,-./0123456789:;<=>?";
 const char *tNMEA0183AISMsg::EmptyAISField = "000000";
 
 //*****************************************************************************
@@ -53,12 +53,13 @@ void tNMEA0183AISMsg::ClearAIS() {
 // Add 6bit with no data.
 bool tNMEA0183AISMsg::AddEmptyFieldToPayloadBin(uint8_t iBits) {
 
-  if ( (iAddPldBin + iBits * 6) >= AIS_BIN_MAX_LEN ) return false; // Is there room for any data
+  if ( (iAddPldBin + iBits * 6 + 1) > AIS_BIN_MAX_LEN ) return false; // Is there room for any data
 
   for (uint8_t i=0;i<iBits;i++) {
     strncpy(PayloadBin+iAddPldBin, EmptyAISField, 6);
     iAddPldBin+=6;
   }
+  PayloadBin[iAddPldBin] = 0;
 
   return true;
 }
@@ -66,18 +67,15 @@ bool tNMEA0183AISMsg::AddEmptyFieldToPayloadBin(uint8_t iBits) {
 //*****************************************************************************
 bool tNMEA0183AISMsg::AddIntToPayloadBin(int32_t ival, uint16_t countBits) {
 
-  if ( (iAddPldBin + countBits ) >= AIS_BIN_MAX_LEN ) return false; // Is there room for any data
+  if ( (iAddPldBin + countBits + 1) > AIS_BIN_MAX_LEN ) return false; // Is there room for any data
 
   bset = ival;
 
   PayloadBin[iAddPldBin]=0;
   uint16_t iAdd=iAddPldBin;
 
-  char buf[2];
   for(int i = countBits-1; i >= 0 ; i--) {
-    snprintf(buf, sizeof(buf), "%d", (int) bset[i]);
-    PayloadBin[iAdd] = buf[0];
-    iAdd++;
+    PayloadBin[iAdd++] = bset[i] ? '1' : '0';
   }
 
   iAddPldBin += countBits;
@@ -99,10 +97,9 @@ bool tNMEA0183AISMsg::AddBoolToPayloadBin(bool &bval, uint8_t size) {
 // filled up with "@" == "000000" to given bit-size
 bool tNMEA0183AISMsg::AddEncodedCharToPayloadBin(char *sval, size_t countBits) {
 
-  if ( (iAddPldBin + countBits ) >= AIS_BIN_MAX_LEN ) return false; // Is there room for any data
+  if ( (iAddPldBin + countBits + 1 ) > AIS_BIN_MAX_LEN ) return false; // Is there room for any data
 
   PayloadBin[iAddPldBin]=0;
-  std::bitset<6> bs;
   const char * ptr;
   size_t len = strlen(sval);  // e.g.: should be 7 for Callsign
   if ( len * 6 > countBits ) len = countBits / 6;
@@ -119,8 +116,6 @@ bool tNMEA0183AISMsg::AddEncodedCharToPayloadBin(char *sval, size_t countBits) {
       AddIntToPayloadBin(0, 6);
     }
   }
-
-  PayloadBin[iAddPldBin+1]=0;
 
   // fill up with "@", also covers empty sval
   if ( len * 6 < countBits ) {
@@ -170,7 +165,7 @@ const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part1(tNMEA0183AISMsg &AISMsg,
   AddStrField("2");
   AddStrField("1");
   AddStrField(sid);
-  AddStrField("A");
+  AddChannelField(own,"A");
   AddStrField( GetPayloadType5_Part1() );
   AddStrField("0");
 
@@ -185,7 +180,7 @@ const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg5Part2(tNMEA0183AISMsg &AISMsg,
   AddStrField("2");
   AddStrField("2");
   AddStrField(sid);
-  AddStrField("A");
+  AddChannelField(own,"A");
   AddStrField( GetPayloadType5_Part2() );
   AddStrField("2"); // Message 5, Part 2 has always 2 Padding Zeros
 
@@ -200,24 +195,46 @@ const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg21Part1(tNMEA0183AISMsg &AISMsg
   AddStrField("2");
   AddStrField("1");
   AddStrField(sid);
-  AddStrField(Class);
+  AddChannelField(own,Class);
   AddStrField( GetPayloadType21_Part1() );
   AddStrField("0");
 
   return AISMsg;
 }
 
-const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg21Part2(tNMEA0183AISMsg &AISMsg, const char *Class, bool own, const char *TalkerID, unsigned char SID) {
+const tNMEA0183AISMsg& tNMEA0183AISMsg::BuildMsg21Part2(
+    tNMEA0183AISMsg &AISMsg, const char *Class, bool own,
+    const char *TalkerID, unsigned char SID) {
 
-  char sid[5];
-  snprintf(sid, sizeof(sid), "%d",SID);
+  char sid[5]; snprintf(sid, sizeof(sid), "%d", SID);
+  uint16_t lenbin = strlen(PayloadBin);
+  uint16_t rem = (lenbin > 264) ? (lenbin - 264) : 0;
+  uint8_t fill = (6 - (rem % 6)) % 6;
+
+  /*
+  // debug
+  {
+    const char* p2 = GetPayloadType21_Part2();
+    const size_t ascii_len = p2 ? strlen(p2) : 0;
+    // Expectation: ascii_len == (rem + fill) / 6
+    if (!p2 || ascii_len != (rem + fill) / 6) {
+      fprintf(stderr,
+	      "MSG21 P2 mismatch: lenbin=%u rem=%u fill=%u ascii_len=%zu\n"
+	      "PayloadBin(%.u): %.u bits total\n",
+	      lenbin, rem, fill, ascii_len, lenbin, lenbin);
+    }
+  }
+  */
+  
+  char fillstr[2]; snprintf(fillstr, sizeof(fillstr), "%u", fill);
+
   Init(own?"VDO":"VDM", TalkerID, '!');
   AddStrField("2");
   AddStrField("2");
   AddStrField(sid);
-  AddStrField(Class);
-  AddStrField( GetPayloadType21_Part2() );
-  AddStrField("2"); // Message 21, Part 2 has always 2 Padding Zeros
+  AddChannelField(own,Class);
+  AddStrField(GetPayloadType21_Part2());
+  AddStrField(fillstr);                          // <- correct fill
 
   return AISMsg;
 }
@@ -229,7 +246,7 @@ const tNMEA0183AISMsg&  tNMEA0183AISMsg::BuildMsg24PartA(tNMEA0183AISMsg &AISMsg
   AddStrField("1");
   AddEmptyField();
   //  AddStrField("A");
-  AddStrField(Class);
+  AddChannelField(own,Class);
   AddStrField( GetPayloadType24_PartA() );
   AddStrField("0");
 
@@ -242,8 +259,7 @@ const tNMEA0183AISMsg& tNMEA0183AISMsg::BuildMsg24PartB(tNMEA0183AISMsg &AISMsg,
   AddStrField("1");
   AddStrField("1");
   AddEmptyField();
-  //  AddStrField("A");
-  AddStrField(Class);
+  AddChannelField(own,Class);
   AddStrField( GetPayloadType24_PartB() );
   AddStrField("0");    // Message 24, both parts have always Zero Padding
 
@@ -279,21 +295,20 @@ const char *tNMEA0183AISMsg::GetPayloadType21_Part1() {
   return Payload;
 }
 
-//******************************************************************************
-// get converted Part 2 of Payload for Message 5
 const char *tNMEA0183AISMsg::GetPayloadType21_Part2() {
+  uint16_t lenbin = strlen(PayloadBin);
+  if (lenbin < 272 || lenbin > 360) return nullptr;
 
-  uint16_t lenbin = strlen( PayloadBin);
-  if ( lenbin < 272 || lenbin > 360 ) return nullptr;
+  uint16_t rem = lenbin - 264;                  // remaining bits after part 1
+  uint8_t fill = (6 - (rem % 6)) % 6;           // 0..5
+  constexpr size_t kMaxBuf = 96 + 5 + 1;         // worst case: rem(96) + fill(5) + '\0'
+  char to[kMaxBuf];
+  
+  memcpy(to, PayloadBin + 264, rem);
+  memset(to + rem, '0', fill);                  // pad with zeros to full 6-bit groups
+  to[rem + fill] = 0;
 
-  lenbin -= 264;        // Second Part is always lien - 264
-  char to[lenbin+3];
-  strncpy(to, PayloadBin + 264, lenbin);
-  to[lenbin+0]='0';
-  to[lenbin+1]='0';
-  to[lenbin+2]=0;
-
-  if ( !ConvertBinaryAISPayloadBinToAscii( to ) ) return nullptr;
+  if (!ConvertBinaryAISPayloadBinToAscii(to)) return nullptr;
   return Payload;
 }
 

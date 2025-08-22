@@ -50,14 +50,15 @@ const double mToFeet=3.2808398950131;
 const double radsToDegMin = 60 * 360.0 / (2 * pi);    // [rad/s -> degree/minute]
 const char Prefix='!';
 
-std::vector<ship *> vships;
+//std::vector<ship *> vships;
+std::vector<std::unique_ptr<ship>> vships;
 
 // ************************  Helper for AIS  ***********************************
 static bool AddMessageType(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType);
 static bool AddRepeat(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t Repeat);
 static bool AddUserID(tNMEA0183AISMsg &NMEA0183AISMsg, uint32_t UserID);
 static bool AddIMONumber(tNMEA0183AISMsg &NMEA0183AISMsg, uint32_t &IMONumber);
-static bool AddText(tNMEA0183AISMsg &NMEA0183AISMsg, char *FieldVal, uint8_t length);
+static bool AddText(tNMEA0183AISMsg &NMEA0183AISMsg, char *FieldVal, size_t length);
 //static bool AddVesselType(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t VesselType);
 static bool AddDimensions(tNMEA0183AISMsg &NMEA0183AISMsg, double Length, double Beam, double PosRefStbd, double PosRefBow);
 static bool AddNavStatus(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t &NavStatus);
@@ -84,7 +85,7 @@ static bool AddETADateTime(tNMEA0183AISMsg &NMEA0183AISMsg, uint16_t &ETAdate, d
 // extern void BuildN0183RawMsg(char *mesg, const tNMEA0183Msg &NMEA0183Msg);
 bool SetAISClassABMessage1( tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType, uint8_t Repeat,
 			    uint32_t UserID, double Latitude, double Longitude, bool Accuracy, bool RAIM, uint8_t Seconds,
-			    double COG, double SOG, double Heading, double ROT, uint8_t NavStatus, bool own, const char *prefix ) {
+			    double COG, double SOG, double Heading, double ROT, uint8_t NavStatus, bool own, const char *TalkerID ) {
 
   NMEA0183AISMsg.ClearAIS();
   if ( !AddMessageType(NMEA0183AISMsg, MessageType) ) return false;    // 0 - 5    | 6    Message Type -> Constant: 1
@@ -104,11 +105,11 @@ bool SetAISClassABMessage1( tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(RAIM, 1) ) return false;    // 148-148  | 1   RAIM flag 0 = RAIM not in use (default), 1 = RAIM in use
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 19) ) return false;       // 149-167  | 19  Radio Status  (-> 0 NOT SENT WITH THIS PGN!!!!!)
 
-  if ( !NMEA0183AISMsg.Init(own?"VDO":"VDM",prefix, Prefix) ) return false;
+  if ( !NMEA0183AISMsg.Init(own?"VDO":"VDM",TalkerID, Prefix) ) return false;
   if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
   if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
   if ( !NMEA0183AISMsg.AddEmptyField() ) return false;
-  if ( !NMEA0183AISMsg.AddStrField("A") ) return false;
+  if ( !NMEA0183AISMsg.AddChannelField(own,"A") ) return false;
   if ( !NMEA0183AISMsg.AddStrField( NMEA0183AISMsg.GetPayload() ) ) return false;
   if ( !NMEA0183AISMsg.AddStrField("0") ) return false;    // Message 1,2,3 has always Zero Padding
 
@@ -154,15 +155,17 @@ bool  SetAISClassAMessage5(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
 //*****************************************************************************
 // AIS safety-related broadcast message
 // https://fossies.org/linux/gpsd/test/sample.aivdm
+#ifdef ORIGINAL_CODE
 bool SetAISSafetyMessage14(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID, char *text)
 {
   NMEA0183AISMsg.ClearAIS();
   if ( !AddMessageType(NMEA0183AISMsg, 14) ) return false;      // 0 - 5    | 6    Message Type -> Constant: 14
   if ( !AddRepeat(NMEA0183AISMsg, Repeat) ) return false;       // 6 - 7    | 2    Repeat Indicator: 0 = default; 3 = do not repeat any more
   if ( !AddUserID(NMEA0183AISMsg, UserID) ) return false;       // 8 - 37   | 30  MMSI
-  if ( !NMEA0183AISMsg.AddIntToPayloadBin(1, 2) ) return false; // 38 - 39   |  2   Spare not used
-  int len = (strlen(text)+1)*6;
-  if ( len > 968 ) len = 968;
+  if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 2) ) return false; // 38 - 39   |  2   Spare not used
+  //  int len = (strlen(text)+1)*6;
+  int len = (int)std::min<size_t>(strlen(text), 161) * 6;
+  if ( len > 966 ) len = 966;
   if ( !AddText(NMEA0183AISMsg, text, len) ) return false;      // 40   | 968 max free text 161  6-bit characters -> Ascii Table
 
   // TODO: the max NMEA183 AIS payload is 82 characters.  So need to split this into 2 sentences.  See BuildMsg21Part1/2 as example
@@ -181,6 +184,42 @@ fprintf(stderr, "%s\n", mesg);
   */
   return true;
 }
+#else
+bool SetAISSafetyMessage14(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID, char *text)
+{
+  NMEA0183AISMsg.ClearAIS();
+  if (!AddMessageType(NMEA0183AISMsg, 14)) return false;
+  if (!AddRepeat(NMEA0183AISMsg, Repeat))  return false;
+  if (!AddUserID(NMEA0183AISMsg, UserID))  return false;
+  if (!NMEA0183AISMsg.AddIntToPayloadBin(0, 2)) return false; // spare
+
+  if (!text) text = (char*)"";
+  // One-sentence cap: 82 six-bit chars total -> 40 header bits + text bits <= 492
+  const size_t kMaxTextChars = 75;                           // 452 bits => 75 chars (450 bits)
+  std::string msg(text);
+  if (msg.size() > kMaxTextChars) msg.resize(kMaxTextChars);
+
+  if (!AddText(NMEA0183AISMsg, (char*)msg.c_str(), msg.size()*6)) return false;
+
+  // pad to 6-bit boundary and record fill
+  uint16_t lenbin = strlen(NMEA0183AISMsg.GetPayloadBin());
+  uint8_t  fill   = (6 - (lenbin % 6)) % 6;
+  if (fill && !NMEA0183AISMsg.AddIntToPayloadBin(0, fill)) return false;
+
+  if (!NMEA0183AISMsg.Init("VDM","AI", Prefix)) return false;
+  if (!NMEA0183AISMsg.AddStrField("1")) return false;
+  if (!NMEA0183AISMsg.AddStrField("1")) return false;
+  if (!NMEA0183AISMsg.AddEmptyField())  return false;
+  if (!NMEA0183AISMsg.AddStrField("A")) return false;
+  if (!NMEA0183AISMsg.AddStrField(NMEA0183AISMsg.GetPayload(true))) return false;
+
+  char fillstr[2]; snprintf(fillstr, sizeof(fillstr), "%u", fill);
+  if (!NMEA0183AISMsg.AddStrField(fillstr)) return false;
+
+  return true;
+}
+
+#endif
 
 //  ****************************************************************************
 // AIS position report (class B 129039) -> Type 18: Standard Class B CS Position Report
@@ -210,7 +249,7 @@ bool SetAISClassBMessage18(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
   if ( !AddSeconds(NMEA0183AISMsg, Seconds) ) return false;            // 133-138  | 6    Seconds in UTC timestamp)
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 2) ) return false;        // 139-140  | 2   Regional Reserved
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(Unit, 1) ) return false;     // 141      | 1   0=Class B SOTDMA unit 1=Class B CS (Carrier Sense) unit
-  if ( !NMEA0183AISMsg.AddIntToPayloadBin(Display, 1) ) return false;  // 142      | 1    0=No visual display, 1=Has display, (Probably not reliable).
+  if (!NMEA0183AISMsg.AddBoolToPayloadBin(Display, 1)) return false;   // 142      | 1    0=No visual display, 1=Has display, (Probably not reliable).
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(DSC, 1) ) return false;     // 143      | 1    If 1, unit is attached to a VHF voice radio with DSC capability.
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(Band, 1) ) return false;    // 144      | 1   If this flag is 1, the unit can use any part of the marine channel.
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(Msg22, 1) ) return false;   // 145      | 1   If 1, unit can accept a channel assignment via Message Type 22.
@@ -222,7 +261,7 @@ bool SetAISClassBMessage18(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
   if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
   if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
   if ( !NMEA0183AISMsg.AddEmptyField() ) return false;
-  if ( !NMEA0183AISMsg.AddStrField("B") ) return false;
+  if ( !NMEA0183AISMsg.AddChannelField(own,"B") ) return false;
   if ( !NMEA0183AISMsg.AddStrField( NMEA0183AISMsg.GetPayload() ) ) return false;
   if ( !NMEA0183AISMsg.AddStrField("0") ) return false;    // Message 18, has always Zero Padding
 
@@ -235,10 +274,11 @@ bool SetAISClassBMessage18(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
 bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData &N2kData) {
   char name[sizeof(N2kData.AtoNName)];
   strncpy(name, N2kData.AtoNName, sizeof(N2kData.AtoNName));
-  name[20] = '\0';
+  name[sizeof(name)-1] = '\0';
+  if (strlen(name) > 20) name[20] = '\0';
 
   NMEA0183AISMsg.ClearAIS();
-  if ( !AddMessageType(NMEA0183AISMsg, N2kData.MessageID) ) return false;                 // 0 - 5    | 6    Message Type -> Constant: 18
+  if ( !AddMessageType(NMEA0183AISMsg, N2kData.MessageID) ) return false;                 // 0 - 5    | 6    Message Type -> Constant: 21
   if ( !AddRepeat(NMEA0183AISMsg, N2kData.Repeat) ) return false;                         // 6 - 7    | 2    Repeat Indicator: 0 = default; 3 = do not repeat any more
   if ( !AddUserID(NMEA0183AISMsg, N2kData.UserID) ) return false;                         // 8 - 37   | 30   MMSI
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(N2kData.AtoNType, 5) ) return false;            // 38-42    | 5    Aid type
@@ -246,13 +286,33 @@ bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData 
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.Accuracy, 1)) return false;            // 163-163  | 1    Position Accuracy
   if ( !AddLongitude(NMEA0183AISMsg, N2kData.Longitude) ) return false;                   // 164-191  | 28  Longitude in Minutes / 10000
   if ( !AddLatitude(NMEA0183AISMsg, N2kData.Latitude) ) return false;                     // 192-218  | 27  Latitude in Minutes / 10000
+  // --------------------------------------------------------------------------
+  // AIS Message 21 Dimensions (ITU-R M.1371)
+  //
+  // AIS defines dimensions relative to a reference point:
+  //   A = Distance from ref point to Bow (for AtoN: toward True North)
+  //   B = Distance from ref point to Stern = Length - A
+  //   C = Distance from ref point to Port  = Beam - D
+  //   D = Distance from ref point to Starboard
+  //
+  // NMEA 2000 PGN 129041 provides:
+  //   PositionReferenceTrueNorth   -> maps to A (bow/forward)
+  //   PositionReferenceStarboard   -> maps to D (starboard)
+  //   Length, Beam                 -> overall structure size
+  //
+  // For circular buoys: Length = Beam = diameter,
+  //   PositionReferenceTrueNorth = PositionReferenceStarboard = radius
+  //
+  // Limits per spec: A,B up to 511 m; C,D up to 63 m.
+  // --------------------------------------------------------------------------
   if ( !AddDimensions(NMEA0183AISMsg, N2kData.Length, N2kData.Beam,
 		      N2kData.PositionReferenceStarboard,
 		      N2kData.PositionReferenceTrueNorth) ) return false;                  // 219-236  | 237-248 | 30 Dimensions
-  if ( !NMEA0183AISMsg.AddIntToPayloadBin(N2kData.GNSSType, 4) ) return false;             // 249-252  | 4    Type of EPFD
+  //  if ( !NMEA0183AISMsg.AddIntToPayloadBin(N2kData.GNSSType, 4) ) return false;         // 249-252  | 4    Type of EPFD
+  if ( !AddEPFDFixType(NMEA0183AISMsg, N2kData.GNSSType)) return false;                    // 249-252  | 4    Type of EPFD
   if ( !AddSeconds(NMEA0183AISMsg, N2kData.Seconds) ) return false;                        // 253-258  | 6    Seconds in UTC timestamp)
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.OffPositionIndicator, 1)) return false; // 259-259  | 1    Off-Position Indicator
-  if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 8) ) return false;                            // 260-267  | 8   Regional Reserved
+  if ( !NMEA0183AISMsg.AddIntToPayloadBin(N2kData.AtoNStatus & 0xff, 8) ) return false;    // 260-267  | 8    AtoNStatus
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.RAIM, 1)) return false;                 // 268-268  | 1    RAIM Flag
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.VirtualAtoNFlag, 1)) return false;      // 269-269  | 1    Virtual-aid flag
   if ( !NMEA0183AISMsg.AddBoolToPayloadBin(N2kData.AssignedModeFlag, 1)) return false;     // 270-270  | 1    Assigned-mode  flag
@@ -262,8 +322,17 @@ bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData 
     char NameExt[14+1];
     strncpy(NameExt, N2kData.AtoNName+20, sizeof(NameExt));
     NameExt[sizeof(NameExt)-1] = '\0';
-    if ( !AddText(NMEA0183AISMsg, NameExt, 88) ) return false;                             // 272-360   | 88  Name Extension
+    if ( !AddText(NMEA0183AISMsg, NameExt, 84) ) return false;                             // 272-356   | 84  Name Extension
   }
+
+  /*
+  // debug
+  {
+    uint16_t lenbin = strlen(NMEA0183AISMsg.PayloadBin);
+    if (lenbin != 272 && lenbin != 356)
+      fprintf(stderr, "MSG21 lenbin unexpected: %u\n", lenbin);
+  }
+  */
 
   return true;
 }  
@@ -295,22 +364,45 @@ bool SetAISAtoNReport21(tNMEA0183AISMsg &NMEA0183AISMsg,  tN2kAISAtoNReportData 
 //
 //  Part A: MessageID, Repeat, UserID, ShipName -> store in vector to call on Part B arrivals!!!
 //  Part B: MessageID, Repeat, UserID, VesselType (5), Callsign (5), Length & Beam, PosRefBow,.. (5)
+#ifdef ORIGINAL_CODE
 bool SetAISClassBMessage24PartA(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID, char *Name) {
 
   bool found = false;
-  for (long unsigned int i = 0; i < vships.size(); i++) {
+  for (size_t i = 0; i < vships.size(); i++) {
     if ( vships[i]->_userID == UserID ) {
       found = true;
       break;
     }
   }
   if ( ! found ) {
-    std::string nm;
-    nm+= Name;
-    vships.push_back(new ship(UserID, nm));
+    vships.push_back(new ship(UserID, std::string(Name ? Name : "")));
+    if (vships.size() > MAX_SHIP_IN_VECTOR) {
+      delete vships.front();
+      vships.erase(vships.begin());
+    }
   }
   return true;
 }
+#else
+bool SetAISClassBMessage24PartA(tNMEA0183AISMsg &,
+                                uint8_t /*MessageID*/, uint8_t /*Repeat*/,
+                                uint32_t UserID, char *Name) {
+  std::string nm = Name ? Name : "";
+  for (size_t i = 0; i < vships.size(); ++i) {
+    if (vships[i]->_userID == UserID) {
+      if (vships[i]->_shipName != nm) vships[i]->_shipName = nm;  // refresh
+      goto trim_ok;
+    }
+  }
+  vships.push_back(std::make_unique<ship>(UserID, nm));
+trim_ok:
+  if (vships.size() > MAX_SHIP_IN_VECTOR) {
+    // unique_ptr handles destruction automatically
+    vships.erase(vships.begin());
+  }
+  return true;
+}
+#endif
 
 // ***************************************************************************************************************
 bool  SetAISClassBMessage24(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat,
@@ -320,16 +412,14 @@ bool  SetAISClassBMessage24(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, 
   uint8_t PartNr = 0;            // Identifier for the message part number; always 0 for Part A
   char *ShipName = (char*)" ";   // get from vector to look up for sent Messages Part A
 
-  uint8_t i;
-  for ( i = 0; i < vships.size(); i++) {
-    if ( vships[i]->_userID == UserID ) {
-//      Serial.print("UserID gefunden: "); Serial.print(UserID);
-      ShipName = const_cast<char*>( vships[i]->_shipName.c_str() );
-//      Serial.print(" / "); Serial.println( ShipName);
+  for ( size_t i = 0; i < vships.size(); i++) {
+    if (vships[i]->_userID == UserID) {
+      ShipName = const_cast<char*>(vships[i]->_shipName.c_str());
+      break;
     }
   }
-  if ( i > MAX_SHIP_IN_VECTOR ) {
-    vships.erase(vships.begin());
+  if (vships.size() > MAX_SHIP_IN_VECTOR) {
+    vships.erase(vships.begin());  // deletes the front unique_ptr automatically
   }
 
   // AIS Type 24 Message
@@ -363,7 +453,7 @@ bool  SetAISClassBMessage24(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, 
 // 6bit    Message Type -> Constant: 1 or 3, 5, 24 etc.
 bool AddMessageType(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType) {
 
-  if (MessageType < 0 || MessageType > 24  ) MessageType = 1;
+  if ( MessageType > 24  ) MessageType = 1;
   if ( ! NMEA0183AISMsg.AddIntToPayloadBin(MessageType, 6) ) return false;
   return true;
 }
@@ -372,7 +462,7 @@ bool AddMessageType(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType) {
 // 2bit    Repeat Indicator: 0 = default; 3 = do not repeat any more
 bool AddRepeat(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t Repeat) {
 
-  if (Repeat < 0 || Repeat > 3) Repeat = 0;
+  if ( Repeat > 3) Repeat = 0;
   if ( !NMEA0183AISMsg.AddIntToPayloadBin(Repeat, 2) ) return false;
   return true;
 }
@@ -381,7 +471,7 @@ bool AddRepeat(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t Repeat) {
 // 30bit UserID = MMSI        (9 decimal digits)
 bool AddUserID(tNMEA0183AISMsg &NMEA0183AISMsg, uint32_t UserID) {
 
-  if (UserID < 0||UserID > 999999999) UserID = 0;
+  if ( UserID > 999999999) UserID = 0;
    if ( !NMEA0183AISMsg.AddIntToPayloadBin(UserID, 30) ) return false;
   return true;
 }
@@ -394,7 +484,7 @@ bool AddUserID(tNMEA0183AISMsg &NMEA0183AISMsg, uint32_t UserID) {
 //  0010000000-1073741823 = official flag state number.
 bool AddIMONumber(tNMEA0183AISMsg &NMEA0183AISMsg, uint32_t &IMONumber) {
   uint32_t iTemp;
-  ( (IMONumber >= 999999 && IMONumber <= 9999999)||(IMONumber >= 10000000 && IMONumber <= 1073741823) )? iTemp = IMONumber : iTemp = 0;
+  ((IMONumber >= 1000000 && IMONumber <= 9999999)||(IMONumber >= 10000000 && IMONumber <= 1073741823) )? iTemp = IMONumber : iTemp = 0;
   if ( ! NMEA0183AISMsg.AddIntToPayloadBin(iTemp, 30) ) return false;
   return true;
 }
@@ -402,7 +492,8 @@ bool AddIMONumber(tNMEA0183AISMsg &NMEA0183AISMsg, uint32_t &IMONumber) {
 // *****************************************************************************
 // 42bit Callsign alphanumeric value, max 7 six-bit characters
 // 120bit Name or Destination
-bool AddText(tNMEA0183AISMsg &NMEA0183AISMsg, char *FieldVal, uint8_t length) {
+bool AddText(tNMEA0183AISMsg &NMEA0183AISMsg, char *FieldVal, size_t length) {
+#ifdef ORIGINAL_CODE
   uint8_t len = length/6;
   if ( strlen(FieldVal) > len ) FieldVal[len] = 0;
 
@@ -418,6 +509,13 @@ bool AddText(tNMEA0183AISMsg &NMEA0183AISMsg, char *FieldVal, uint8_t length) {
 
   if ( !NMEA0183AISMsg.AddEncodedCharToPayloadBin(AISStr, length) ) return false;
   return true;
+#else
+  size_t maxChars = length / 6;
+  std::string tmp(FieldVal ? FieldVal : "");
+  if (tmp.size() > maxChars) tmp.resize(maxChars);
+  for (auto &ch : tmp) ch = std::toupper((unsigned char)ch);
+  return NMEA0183AISMsg.AddEncodedCharToPayloadBin((char *)tmp.c_str(), length);
+#endif
 }
 
 //  *****************************************************************************
@@ -430,6 +528,7 @@ bool AddText(tNMEA0183AISMsg &NMEA0183AISMsg, char *FieldVal, uint8_t length) {
 //  the special value 511 indicates 511 meters or greater;
 //  for the dimensions to port and starboard, the special value 63 indicates 63 meters or greater.
 // 30 Bit
+#ifdef ORIGINAL_CODE
 bool AddDimensions(tNMEA0183AISMsg &NMEA0183AISMsg, double Length, double Beam, double PosRefStbd, double PosRefBow) {
   uint16_t _PosRefBow = 0;
   uint16_t _PosRefStern = 0;
@@ -465,6 +564,30 @@ bool AddDimensions(tNMEA0183AISMsg &NMEA0183AISMsg, double Length, double Beam, 
   if ( ! NMEA0183AISMsg.AddIntToPayloadBin(_PosRefStbd, 6) ) return false;
   return true;
 }
+#else
+bool AddDimensions(tNMEA0183AISMsg &m, double L, double B, double D, double A) {
+  uint16_t a=0,b=0,c=0,d=0;
+  
+  if (A >= 0.0 && A <= 511.0) a = (uint16_t)ceil(A); else a = 511;
+  if (D >= 0.0 && D <=  63.0) d = (uint16_t)ceil(D); else d =  63;
+
+  if (!N2kIsNA(L)) {
+    int stern = (int)ceil(L) - (int)a;
+    if (stern < 0) stern = 0;
+    if (stern > 511) stern = 511;
+    b = (uint16_t)stern;
+  }
+  if (!N2kIsNA(B)) {
+    int port = (int)ceil(B) - (int)d;
+    if (port < 0) port = 0;
+    if (port > 63) port = 63;
+    c = (uint16_t)port;
+  }
+
+  return m.AddIntToPayloadBin(a,9) && m.AddIntToPayloadBin(b,9) &&
+         m.AddIntToPayloadBin(c,6) && m.AddIntToPayloadBin(d,6);
+}
+#endif
 
 // *****************************************************************************
 // 4 Bit  Navigational Status  e.g.: "Under way sailing"
@@ -484,12 +607,21 @@ bool AddNavStatus(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t &NavStatus) {
 //  127 = turning right at more than 5deg/30s (No TI available)
 //  -127 = turning left at more than 5deg/30s (No TI available)
 //  128 (80 hex) indicates no turn information available (default)
+// rot_deg_min: signed degrees per minute; NA => 128
+int8_t encodeROT(double rot_deg_min) {
+  if (fabs(rot_deg_min) < 0.5) return 0;                // ~no turn
+  double v = 4.733 * sqrt(fabs(rot_deg_min));
+  int val = (int)floor(v + 0.5);
+  if (val > 126) val = 126;                             // 127 = special (>5°/30s) is reserved
+  return (rot_deg_min < 0 ? -val : val);
+}
 bool AddROT(tNMEA0183AISMsg &NMEA0183AISMsg, double &rot) {
   int8_t iTemp;
   if ( N2kIsNA(rot)) iTemp = 128;
   else {
-    rot *= radsToDegMin;
-    (rot > -128.0 && rot < 128.0)? iTemp = aRoundToInt(rot) : iTemp = 128;
+    //    rot *= radsToDegMin;
+    //    (rot > -128.0 && rot < 128.0)? iTemp = aRoundToInt(rot) : iTemp = 128;
+    iTemp = encodeROT(rot * radsToDegMin);
   }
 
   if ( ! NMEA0183AISMsg.AddIntToPayloadBin(iTemp, 8) ) return false;
@@ -501,16 +633,15 @@ bool AddROT(tNMEA0183AISMsg &NMEA0183AISMsg, double &rot) {
 // Speed over ground is in 0.1-knot resolution from 0 to 102 knots.
 // Value 1023 indicates speed is not available, value 1022 indicates 102.2 knots or higher.
 bool AddSOG (tNMEA0183AISMsg &NMEA0183AISMsg, double &sog) {
-  int16_t iTemp;
-  if ( sog < 0.0 ) iTemp = 1023;
+  int16_t v;
+  if ( N2kIsNA(sog) || sog < 0.0 ) v = 1023;
   else {
     sog *= msTokn;
-    if (sog > 102.2) iTemp = 1023;
-    else iTemp = aRoundToInt( 10 * sog );
+    v = aRoundToInt(10.0 * sog);
+    if (v > 1022) v = 1022;
   }
 
-  if ( ! NMEA0183AISMsg.AddIntToPayloadBin(iTemp, 10) ) return false;
-  return true;
+  return NMEA0183AISMsg.AddIntToPayloadBin(v, 10);
 }
 
 // *****************************************************************************
@@ -519,8 +650,10 @@ bool AddSOG (tNMEA0183AISMsg &NMEA0183AISMsg, double &sog) {
 // A value of 181 degrees (0x6791AC0 hex) indicates that longitude is not available and is the default.
 // AIS Longitude is given in in 1/10000 min; divide by 600000.0 to obtain degrees.
 bool AddLongitude(tNMEA0183AISMsg &NMEA0183AISMsg, double &Longitude) {
-  int32_t iTemp;
-  (Longitude >= -180.0 && Longitude <= 180.0)? iTemp = (int) (Longitude * 600000) : iTemp = 181 * 600000;
+  //  int32_t iTemp;
+  //  (Longitude >= -180.0 && Longitude <= 180.0)? iTemp = (int) (Longitude * 600000) : iTemp = 181 * 600000;
+  int32_t iTemp =  (Longitude >= -180.0 && Longitude <= 180.0) ? aRoundToInt(Longitude * 600000.0) : 181*600000;
+
   if ( ! NMEA0183AISMsg.AddIntToPayloadBin(iTemp, 28) ) return false;
   return true;
 }
@@ -530,14 +663,17 @@ bool AddLongitude(tNMEA0183AISMsg &NMEA0183AISMsg, double &Longitude) {
 //  Values up to plus or minus 90 degrees, North = positive, South = negative.
 //   A value of 91 degrees (0x3412140 hex) indicates latitude is not available and is the default.
 bool AddLatitude(tNMEA0183AISMsg &NMEA0183AISMsg, double &Latitude) {
-  int32_t iTemp;
-  (Latitude >= -90.0 && Latitude <= 90.0)? iTemp = (int) (Latitude * 600000) : iTemp = 91 * 600000;
+  //  int32_t iTemp;
+  //  (Latitude >= -90.0 && Latitude <= 90.0)? iTemp = (int) (Latitude * 600000) : iTemp = 91 * 600000;
+  int32_t iTemp = (Latitude >= -90.0 && Latitude <= 90.0) ? aRoundToInt(Latitude * 600000.0) : 91 * 600000;
+ 
   if ( ! NMEA0183AISMsg.AddIntToPayloadBin(iTemp, 27) ) return false;
   return true;
 }
 
 //  ****************************************************************************
 // 9 bit True Heading (HDG) 0 to 359 degrees, 511 = not available.
+#ifdef ORIGINAL_CODE
 bool AddHeading (tNMEA0183AISMsg &NMEA0183AISMsg, double &heading) {
   uint16_t iTemp;
   if ( N2kIsNA(heading) ) iTemp = 511;
@@ -548,16 +684,34 @@ bool AddHeading (tNMEA0183AISMsg &NMEA0183AISMsg, double &heading) {
   if ( ! NMEA0183AISMsg.AddIntToPayloadBin(iTemp, 9) ) return false;
   return true;
 }
+#else
+bool AddHeading(tNMEA0183AISMsg &m, double &heading_rad) {
+  uint16_t out = 511;
+  if (!N2kIsNA(heading_rad)) {
+    double deg = heading_rad * radToDeg;
+    if (deg >= 0.0 && deg <= 360.0) {
+      int v = aRoundToInt(deg);
+      if (v == 360) v = 0;
+      if (v >= 0 && v <= 359) out = (uint16_t)v;
+    }
+  }
+  return m.AddIntToPayloadBin(out, 9);
+}
+#endif
+
 
 // *****************************************************************************
 // 12bit Relative to true north, to 0.1 degree precision
-bool AddCOG(tNMEA0183AISMsg &NMEA0183AISMsg, double cog) {
-  int16_t iTemp;
-  cog *= radToDeg;
-  if ( cog >= 0.0 && cog < 360.0 ) { iTemp = aRoundToInt( cog * 10 ); } else { iTemp = 3600; }
-  if ( ! NMEA0183AISMsg.AddIntToPayloadBin(iTemp, 12) ) return false;
-  return true;
+bool AddCOG(tNMEA0183AISMsg &m, double cog_rad) {
+  double deg = cog_rad * radToDeg;
+  if (!(deg >= 0.0 && deg < 360.0))
+    return m.AddIntToPayloadBin(3600, 12); // N/A
+  int v = aRoundToInt(deg * 10.0);                 // 0..3599
+  if (v == 3600)
+    v = 0;                            // just-in-case rounding
+  return m.AddIntToPayloadBin(v, 12);
 }
+
 
 // *****************************************************************************
 // 6bit   Seconds in UTC timestamp should be 0-59, except for these special values:

@@ -36,6 +36,7 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <vector>
 #include <string>
 #include "N2kMessages.h"
+#include <memory>
 
 #define MAX_SHIP_IN_VECTOR 200
 class ship {
@@ -46,7 +47,8 @@ public:
     ship(uint32_t UserID, std::string ShipName) :  _userID(UserID), _shipName(ShipName) {}
 };
 
-extern std::vector<ship *> vships;
+//extern std::vector<ship *> vships;
+extern std::vector<std::unique_ptr<ship>> vships;
 
 // Types 1, 2 and 3: Position Report Class A or B
 bool SetAISClassABMessage1(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageType, uint8_t Repeat,

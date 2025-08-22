@@ -36,7 +36,8 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 #ifndef AIS_MSG_MAX_LEN
-#define AIS_MSG_MAX_LEN 100  // maximum length of AIS Payload
+//#define AIS_MSG_MAX_LEN 100  // maximum length of AIS Payload
+#define AIS_MSG_MAX_LEN 200  // set back to 100 after adding fragmentation to AIS type 14 Safety Message.
 #endif
 
 #ifndef AIS_BIN_MAX_LEN
@@ -50,7 +51,7 @@ class tNMEA0183AISMsg : public tNMEA0183Msg {
   protected:  // AIS-NMEA
     std::bitset<BITSET_LENGTH> bset;
     static const char *EmptyAISField;  // 6bits 0      not used yet.....
-    static const char *AsciChar;
+    static const char *AsciiChar;
 
     uint16_t iAddPldBin;
     char Payload[AIS_MSG_MAX_LEN];
@@ -87,10 +88,14 @@ class tNMEA0183AISMsg : public tNMEA0183Msg {
     bool AddEmptyFieldToPayloadBin(uint8_t iBits);
     bool ConvertBinaryAISPayloadBinToAscii(const char *payloadbin);
 
+    inline bool AddChannelField(bool own, const char* ch) {
+      return own ? AddEmptyField() : (ch && *ch ? AddStrField(ch) : AddEmptyField());
+    }
+
   // AIS Helper functions
   protected:
     inline int32_t aRoundToInt(double x) {
-      return (x >= 0) ? (int32_t) floor(x + 0.5) : (int32_t) ceil(x - 0.5);
+       return (x >= 0) ? (int32_t) floor(x + 0.5) : (int32_t) ceil(x - 0.5);
     }
 };
 #endif
