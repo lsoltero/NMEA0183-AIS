@@ -37,11 +37,12 @@ OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifndef AIS_MSG_MAX_LEN
 //#define AIS_MSG_MAX_LEN 100  // maximum length of AIS Payload
-#define AIS_MSG_MAX_LEN 200  // set back to 100 after adding fragmentation to AIS type 14 Safety Message.
+#define AIS_MSG_MAX_LEN 256  // set back to 100 after adding fragmentation to AIS type 14 Safety Message.
 #endif
 
 #ifndef AIS_BIN_MAX_LEN
-#define AIS_BIN_MAX_LEN 500  // maximum length of AIS Binary Payload (before encoding to Ascii)
+// #define AIS_BIN_MAX_LEN 500  // maximum length of AIS Binary Payload (before encoding to Ascii)
+#define AIS_BIN_MAX_LEN 1200  // needed for multi-segment type 14 safety messages
 #endif
 
 #define BITSET_LENGTH 120

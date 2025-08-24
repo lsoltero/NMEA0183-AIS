@@ -155,36 +155,8 @@ bool  SetAISClassAMessage5(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
 //*****************************************************************************
 // AIS safety-related broadcast message
 // https://fossies.org/linux/gpsd/test/sample.aivdm
-#ifdef ORIGINAL_CODE
-bool SetAISSafetyMessage14(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID, char *text)
-{
-  NMEA0183AISMsg.ClearAIS();
-  if ( !AddMessageType(NMEA0183AISMsg, 14) ) return false;      // 0 - 5    | 6    Message Type -> Constant: 14
-  if ( !AddRepeat(NMEA0183AISMsg, Repeat) ) return false;       // 6 - 7    | 2    Repeat Indicator: 0 = default; 3 = do not repeat any more
-  if ( !AddUserID(NMEA0183AISMsg, UserID) ) return false;       // 8 - 37   | 30  MMSI
-  if ( !NMEA0183AISMsg.AddIntToPayloadBin(0, 2) ) return false; // 38 - 39   |  2   Spare not used
-  //  int len = (strlen(text)+1)*6;
-  int len = (int)std::min<size_t>(strlen(text), 161) * 6;
-  if ( len > 966 ) len = 966;
-  if ( !AddText(NMEA0183AISMsg, text, len) ) return false;      // 40   | 968 max free text 161  6-bit characters -> Ascii Table
-
-  // TODO: the max NMEA183 AIS payload is 82 characters.  So need to split this into 2 sentences.  See BuildMsg21Part1/2 as example
-  if ( !NMEA0183AISMsg.Init("VDM","AI", Prefix) ) return false;
-  if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
-  if ( !NMEA0183AISMsg.AddStrField("1") ) return false;
-  if ( !NMEA0183AISMsg.AddEmptyField() ) return false;
-  if ( !NMEA0183AISMsg.AddStrField("A") ) return false;
-  if ( !NMEA0183AISMsg.AddStrField( NMEA0183AISMsg.GetPayload(true) ) ) return false;
-  if ( !NMEA0183AISMsg.AddStrField("0") ) return false;    // Message 14, has always Zero Padding
-
-  /*
-  char mesg[1000] = {0};
-  BuildN0183RawMsg(mesg, NMEA0183AISMsg);
-fprintf(stderr, "%s\n", mesg);
-  */
-  return true;
-}
-#else
+//
+// currently support a max of 75 characters.  anything over this gets truncated.
 bool SetAISSafetyMessage14(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID, char *text)
 {
   NMEA0183AISMsg.ClearAIS();
@@ -219,7 +191,126 @@ bool SetAISSafetyMessage14(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, u
   return true;
 }
 
-#endif
+// BuildAISSafetyMessage14Multi
+// - Builds one AIS message type 14 payload once, then fragments its 6-bit ASCII
+//   over multiple AIVDM/AIVDO sentences.
+// - Truncates input text to 161 characters (spec limit).
+// - For VDO (own==true): channel field is empty and talker is "!AIVDO".
+// - For VDM (own==false): channel field is 'A' or 'B' (caller provides).
+// - Ensures each sentence stays within MAX_NMEA0183_MSG_LEN (81) of the library.
+bool BuildAISSafetyMessage14Multi(std::vector<tNMEA0183AISMsg>& out_sentences,
+                                  bool own,               // true => VDO (own ship), channel field is empty
+                                  char channelIfVDM,      // 'A' or 'B' when own==false (VDM)
+                                  uint8_t repeat,
+                                  uint32_t mmsi,
+                                  const char* text)
+{
+  out_sentences.clear();
+
+  // ---------- 1) Build full binary payload once ----------
+  tNMEA0183AISMsg payloadBuilder;
+  payloadBuilder.ClearAIS();
+  if (!AddMessageType(payloadBuilder, 14)) return false;
+  if (!AddRepeat(payloadBuilder, repeat))  return false;
+  if (!AddUserID(payloadBuilder, mmsi))    return false;
+  if (!payloadBuilder.AddIntToPayloadBin(0, 2)) return false; // spare
+
+  // Truncate at spec limit (161)
+  static constexpr size_t kMaxType14TextChars = 161;
+  std::string msg = text ? std::string(text) : std::string();
+  if (msg.size() > kMaxType14TextChars) msg.resize(kMaxType14TextChars);
+
+  if (!AddText(payloadBuilder, (char*)msg.c_str(),
+               static_cast<uint16_t>(msg.size()*6))) return false;
+
+  // pad to 6-bit boundary
+  {
+    uint16_t lenbin = strlen(payloadBuilder.GetPayloadBin());
+    uint8_t  fill   = static_cast<uint8_t>((6 - (lenbin % 6)) % 6);
+    if (fill && !payloadBuilder.AddIntToPayloadBin(0, fill)) return false;
+  }
+
+  // ---------- Encode binary -> ASCII locally ----------
+  const char* bin = payloadBuilder.GetPayloadBin();
+  if (!bin) return false;
+
+  const size_t binLen = strlen(bin);
+  if (binLen % 6 != 0) return false; // should be padded
+
+  auto sixbits_to_ascii = [](uint8_t v)->char {
+    v = static_cast<uint8_t>(v + 48);
+    if (v > 87) v = static_cast<uint8_t>(v + 8);
+    return static_cast<char>(v);
+  };
+
+  std::string asciiPayload;
+  asciiPayload.reserve(binLen/6);
+  for (size_t i = 0; i < binLen; i += 6) {
+    uint8_t v = 0;
+    for (int b = 0; b < 6; ++b) {
+      v = static_cast<uint8_t>((v << 1) | (bin[i + b] == '1' ? 1 : 0));
+    }
+    asciiPayload.push_back(sixbits_to_ascii(v));
+  }
+
+  const uint8_t globalFill =
+      static_cast<uint8_t>((6 - (binLen % 6)) % 6); // usually 0 for type 14
+
+  // ---------- 2) Fragmentation with adaptive chunk sizing ----------
+  const size_t asciiLen = asciiPayload.size();
+  // Always-safe payload size per sentence for this library's 81-byte buffer:
+  static constexpr size_t kMaxChunkPerSentence = 50;
+
+  // Compute total fragments from the fixed chunk size
+  uint8_t fragCnt = static_cast<uint8_t>(std::max<size_t>(1, (asciiLen + kMaxChunkPerSentence - 1) / kMaxChunkPerSentence));
+
+  char fragCntStr[4];  // enough for 1..9
+  snprintf(fragCntStr, sizeof(fragCntStr), "%u", fragCnt);
+
+  // Build sentences
+  size_t offset = 0;
+  for (uint8_t fragNum = 1; offset < asciiLen || (asciiLen == 0 && fragNum == 1); ++fragNum) {
+    const size_t remaining = asciiLen - offset;
+    const size_t take = std::min(kMaxChunkPerSentence, remaining);
+    std::string chunk = (take > 0) ? asciiPayload.substr(offset, take) : std::string();
+
+    tNMEA0183AISMsg sentence;
+    if (!sentence.Init(own ? "VDO" : "VDM", "AI", Prefix)) return false;
+
+    // <fragcnt>
+    if (!sentence.AddStrField(fragCntStr)) return false;
+
+    // <fragnum>
+    char fragNumStr[4];
+    snprintf(fragNumStr, sizeof(fragNumStr), "%u", fragNum);
+    if (!sentence.AddStrField(fragNumStr)) return false;
+
+    // <seqid> empty
+    if (!sentence.AddEmptyField()) return false;
+
+    // <channel>
+    if (own) {
+      if (!sentence.AddEmptyField()) return false;  // VDO: empty
+    } else {
+      char chanStr[2] = { channelIfVDM, '\0' };
+      if (!sentence.AddStrField(chanStr)) return false;
+    }
+
+    // <payload>
+    if (!sentence.AddStrField(chunk.c_str())) return false;
+
+    // <fill>
+    const bool isLast = (fragNum == fragCnt);
+    char fillStr[2] = { static_cast<char>('0' + (isLast ? globalFill : 0)), '\0' };
+    if (!sentence.AddStrField(fillStr)) return false;
+
+    out_sentences.push_back(sentence);
+    offset += take;
+  }
+
+  return !out_sentences.empty();
+}
+
 
 //  ****************************************************************************
 // AIS position report (class B 129039) -> Type 18: Standard Class B CS Position Report

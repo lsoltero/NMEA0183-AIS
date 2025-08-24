@@ -66,7 +66,14 @@ bool SetAISClassAMessage5(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, ui
 //*****************************************************************************
 // AIS safety-related broadcast message
 // PGN129802
+// single segment max text len 75 characters
 bool SetAISSafetyMessage14(tNMEA0183AISMsg &NMEA0183AISMsg, uint8_t MessageID, uint8_t Repeat, uint32_t UserID, char *text);
+bool BuildAISSafetyMessage14Multi(std::vector<tNMEA0183AISMsg>& out_sentences,
+                                  bool own,               // true => VDO (TX own vessel), channel field is empty
+                                  char channelIfVDM,      // 'A' or 'B' used only when own==false (VDM)
+                                  uint8_t repeat,
+                                  uint32_t mmsi,
+                                  const char* text);
 
 //*****************************************************************************
 // AIS position report (class B 129039) -> Standard Class B CS Position Report Message Type 18 Part B
